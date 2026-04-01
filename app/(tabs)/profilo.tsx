@@ -1,31 +1,81 @@
-import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { supabase } from '../../supabase';
 
 export default function ProfiloScreen() {
-  const taskCompletati = [
-    { titolo: 'Esami del sangue', data: 'Completato il 10 Maggio' },
-    { titolo: 'Visita anestesiologica', data: 'Completato il 12 Maggio' },
-  ];
+  const [paziente, setPaziente] = useState<any>(null);
+  const [totaleAttivita, setTotaleAttivita] = useState(0);
+  const [attivitaCompletate, setAttivitaCompletate] = useState<any[]>([]);
 
-  const taskInAttesa = [
-    { titolo: 'Consenso informato', nota: 'Richiesto entro domani' },
-  ];
+  useFocusEffect(
+    useCallback(() => {
+      caricaDati();
+    }, [])
+  );
+
+  const caricaDati = async () => {
+    const pazienteJson = await AsyncStorage.getItem('paziente');
+    if (!pazienteJson) return;
+    const p = JSON.parse(pazienteJson);
+    setPaziente(p);
+
+    const { count } = await supabase
+      .from('protocol_activities')
+      .select('*', { count: 'exact', head: true })
+      .eq('intervention_types_id', 1)
+      .not('giorni_prima', 'is', null);
+
+    setTotaleAttivita(count || 0);
+
+    const { data: compData } = await supabase
+      .from('patient_activities')
+      .select('activity_id, completata_at')
+      .eq('patient_id', p.id)
+      .eq('completata', true);
+
+    if (compData && compData.length > 0) {
+      const ids = compData.map((r: any) => r.activity_id);
+      const { data: attData } = await supabase
+        .from('protocol_activities')
+        .select('titolo')
+        .in('id', ids);
+
+      const completateConData = (attData || []).map((a: any, i: number) => ({
+        titolo: a.titolo,
+        data: new Date(compData[i].completata_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' }),
+      }));
+
+      setAttivitaCompletate(completateConData);
+    } else {
+      setAttivitaCompletate([]);
+    }
+  };
+
+  if (!paziente) return null;
+
+  const nCompletate = attivitaCompletate.length;
+  const inAttesa = totaleAttivita - nCompletate;
+  const percentuale = totaleAttivita > 0 ? Math.round((nCompletate / totaleAttivita) * 100) : 0;
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.label}>SCHEDA PAZIENTE</Text>
-        <Text style={styles.nome}>Elena Bianchi</Text>
+        <Text style={styles.nome}>{paziente.Nome} {paziente.Cognome}</Text>
       </View>
 
       <View style={styles.infoSection}>
         <View style={styles.infoCard}>
           <Text style={styles.infoLabel}>INTERVENTO</Text>
-          <Text style={styles.infoValore}>Colonscopia</Text>
+          <Text style={styles.infoValore}>{paziente.tipo_intervento}</Text>
         </View>
         <View style={styles.infoCard}>
           <Text style={styles.infoLabel}>DATA CHIRURGIA</Text>
-          <Text style={styles.infoValore}>15 Maggio 2026</Text>
+          <Text style={styles.infoValore}>
+            {new Date(paziente.data_intervento).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </Text>
         </View>
         <View style={styles.infoCard}>
           <Text style={styles.infoLabel}>CLINICA ASSEGNATA</Text>
@@ -37,39 +87,38 @@ export default function ProfiloScreen() {
         <Text style={styles.sectionTitle}>Riepilogo Attività</Text>
         <View style={styles.statsRow}>
           <View style={[styles.statBox, styles.statBoxVerde]}>
-            <Text style={styles.statNumero}>12</Text>
+            <Text style={styles.statNumero}>{nCompletate}</Text>
             <Text style={styles.statLabel}>Task Completati</Text>
           </View>
           <View style={[styles.statBox, styles.statBoxGrigio]}>
-            <Text style={styles.statNumero}>3</Text>
+            <Text style={styles.statNumero}>{inAttesa}</Text>
             <Text style={styles.statLabel}>In Attesa</Text>
           </View>
         </View>
         <View style={styles.progressBadge}>
-          <Text style={styles.progressBadgeText}>80% Completato</Text>
+          <Text style={styles.progressBadgeText}>{percentuale}% Completato</Text>
         </View>
       </View>
 
-      <View style={styles.taskSection}>
-        <Text style={styles.sectionTitle}>Dettagli Task</Text>
-        {taskInAttesa.map((t, i) => (
-          <View key={i} style={styles.taskCard}>
-            <Text style={styles.taskTitolo}>{t.titolo}</Text>
-            <Text style={styles.taskNota}>{t.nota}</Text>
-          </View>
-        ))}
-        {taskCompletati.map((t, i) => (
-          <View key={i} style={[styles.taskCard, styles.taskCardCompletato]}>
-            <Text style={styles.taskCheckmark}>✓</Text>
-            <View>
-              <Text style={styles.taskTitoloCompletato}>{t.titolo}</Text>
-              <Text style={styles.taskData}>{t.data}</Text>
+      {attivitaCompletate.length > 0 && (
+        <View style={styles.taskSection}>
+          <Text style={styles.sectionTitle}>Attività Completate</Text>
+          {attivitaCompletate.map((t, i) => (
+            <View key={i} style={[styles.taskCard, styles.taskCardCompletato]}>
+              <Text style={styles.taskCheckmark}>✓</Text>
+              <View>
+                <Text style={styles.taskTitoloCompletato}>{t.titolo}</Text>
+                <Text style={styles.taskData}>Completato il {t.data}</Text>
+              </View>
             </View>
-          </View>
-        ))}
-      </View>
+          ))}
+        </View>
+      )}
 
-      <TouchableOpacity style={styles.exitButton} onPress={() => router.replace('/')}>
+      <TouchableOpacity style={styles.exitButton} onPress={async () => {
+        await AsyncStorage.removeItem('paziente');
+        router.replace('/');
+      }}>
         <Text style={styles.exitButtonText}>Esci</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -98,8 +147,6 @@ const styles = StyleSheet.create({
   taskSection: { backgroundColor: 'white', padding: 16, marginBottom: 8 },
   taskCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 8, backgroundColor: '#f9f9f9', marginBottom: 8 },
   taskCardCompletato: { backgroundColor: '#f0f8f4' },
-  taskTitolo: { fontSize: 14, fontWeight: 'bold', color: '#1a3a5c' },
-  taskNota: { fontSize: 12, color: '#f5a623' },
   taskCheckmark: { fontSize: 18, color: '#2d8a5e', marginRight: 12 },
   taskTitoloCompletato: { fontSize: 14, color: '#666' },
   taskData: { fontSize: 12, color: '#999' },
