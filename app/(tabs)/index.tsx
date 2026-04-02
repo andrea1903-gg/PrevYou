@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../supabase';
 
 export default function HomeScreen() {
@@ -9,6 +9,9 @@ export default function HomeScreen() {
   const [attivita, setAttivita] = useState<any[]>([]);
   const [completate, setCompletate] = useState<Set<number>>(new Set());
   const [totaleAttivita, setTotaleAttivita] = useState(0);
+  const [codice, setCodice] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errore, setErrore] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -18,7 +21,10 @@ export default function HomeScreen() {
 
   const caricaDati = async () => {
     const pazienteJson = await AsyncStorage.getItem('paziente');
-    if (!pazienteJson) { router.replace('/'); return; }
+    if (!pazienteJson) {
+      setPaziente(null);
+      return;
+    }
     const p = JSON.parse(pazienteJson);
     setPaziente(p);
 
@@ -57,6 +63,28 @@ export default function HomeScreen() {
     setCompletate(new Set((compData || []).map((r: any) => r.activity_id)));
   };
 
+  const handleAccedi = async () => {
+    if (codice.length === 0) return;
+    setLoading(true);
+    setErrore('');
+
+    const { data, error } = await supabase
+      .from('Patients')
+      .select('*')
+      .eq('codice_accesso', codice.toUpperCase())
+      .single();
+
+    setLoading(false);
+
+    if (error || !data) {
+      setErrore('Codice non valido. Controlla e riprova.');
+      return;
+    }
+
+    await AsyncStorage.setItem('paziente', JSON.stringify(data));
+    await caricaDati();
+  };
+
   const toggleCompletata = async (activityId: number, dataAttivita: Date) => {
     if (!paziente) return;
     const oggi = new Date();
@@ -84,7 +112,38 @@ export default function HomeScreen() {
     }
   };
 
-  if (!paziente) return null;
+  if (!paziente) {
+    return (
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={loginStyles.container} keyboardShouldPersistTaps="handled">
+          <View style={loginStyles.logoContainer}>
+            <View style={loginStyles.logoBox}>
+              <Text style={loginStyles.logoIcon}>+</Text>
+            </View>
+            <Text style={loginStyles.logoText}>PrevYou+</Text>
+            <Text style={loginStyles.logoSubtitle}>Il tuo compagno di recupero</Text>
+          </View>
+          <View style={loginStyles.card}>
+            <Text style={loginStyles.cardTitle}>Accesso Paziente</Text>
+            <Text style={loginStyles.cardLabel}>INSERISCI IL CODICE RICEVUTO DALLA CLINICA</Text>
+            <TextInput
+              style={loginStyles.input}
+              placeholder="Es. CUN-482"
+              placeholderTextColor="#999"
+              value={codice}
+              onChangeText={setCodice}
+              autoCapitalize="characters"
+            />
+            {errore ? <Text style={loginStyles.errore}>{errore}</Text> : null}
+            <TouchableOpacity style={loginStyles.button} onPress={handleAccedi} disabled={loading}>
+              {loading ? <ActivityIndicator color="white" /> : <Text style={loginStyles.buttonText}>Accedi</Text>}
+            </TouchableOpacity>
+            <Text style={loginStyles.footerText}>Riceverai il codice dalla tua struttura sanitaria</Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
 
   const giorniMancanti = Math.ceil(
     (new Date(paziente.data_intervento).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
@@ -100,8 +159,8 @@ export default function HomeScreen() {
           <View style={styles.headerBadge}>
             <Text style={styles.headerBadgeText}>Intervento tra {giorniMancanti} giorni</Text>
           </View>
-          <TouchableOpacity style={styles.profiloButton} onPress={() => router.push('/(tabs)/profilo')}>
-            <Text style={styles.profiloIcon}>👤</Text>
+          <TouchableOpacity style={styles.profiloButton} onPress={() => router.push('/(tabs)/profilo')}>      
+                 <Text style={styles.profiloIcon}>👤</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -160,6 +219,23 @@ export default function HomeScreen() {
     </ScrollView>
   );
 }
+
+const loginStyles = StyleSheet.create({
+  container: { flexGrow: 1, backgroundColor: '#e8f5ee', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  logoContainer: { alignItems: 'center', marginBottom: 40 },
+  logoBox: { width: 80, height: 80, backgroundColor: '#1a3a5c', borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  logoIcon: { fontSize: 40, color: 'white', fontWeight: 'bold' },
+  logoText: { fontSize: 28, fontWeight: 'bold', color: '#1a3a5c' },
+  logoSubtitle: { fontSize: 14, color: '#666', marginTop: 4 },
+  card: { backgroundColor: 'white', borderRadius: 16, padding: 24, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8 },
+  cardTitle: { fontSize: 22, fontWeight: 'bold', color: '#1a3a5c', marginBottom: 16 },
+  cardLabel: { fontSize: 11, color: '#666', marginBottom: 8, letterSpacing: 0.5 },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 14, fontSize: 16, marginBottom: 8, color: '#333' },
+  errore: { color: '#dc2626', fontSize: 13, marginBottom: 8 },
+  button: { backgroundColor: '#1a3a5c', borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 16, marginTop: 8 },
+  buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+  footerText: { fontSize: 12, color: '#999', textAlign: 'center' },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },

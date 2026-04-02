@@ -121,7 +121,7 @@ export default function CalendarioScreen() {
             const giorno = new Date(meseMostrato.getFullYear(), meseMostrato.getMonth(), i + 1);
             giorno.setHours(0, 0, 0, 0);
             const isOggi = giorno.toDateString() === oggi.toDateString();
-            const isIntervento = dataIntervento && giorno.toDateString() === new Date(dataIntervento).setHours(0,0,0,0).toString();
+            const isIntervento = dataIntervento && giorno.toDateString() === new Date(dataIntervento.getFullYear(), dataIntervento.getMonth(), dataIntervento.getDate()).toDateString();
             const isSelezionato = giorno.toDateString() === giornoSelezionato.toDateString();
             const haAtt = haAttivita(giorno);
 
@@ -145,9 +145,17 @@ export default function CalendarioScreen() {
         <Text style={styles.attivitaTitolo}>
           {giornoSelezionato.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
         </Text>
-        {attivitaDelGiorno.length === 0 ? (
-          <Text style={styles.nessunaAttivita}>Nessuna attività per questo giorno.</Text>
-        ) : (
+        {dataIntervento && giornoSelezionato.toDateString() === new Date(dataIntervento.getFullYear(), dataIntervento.getMonth(), dataIntervento.getDate()).toDateString() && (
+  <View style={[styles.attivitaCard, { backgroundColor: '#fee2e2', borderLeftWidth: 4, borderLeftColor: '#dc2626' }]}>
+    <View style={styles.attivitaContent}>
+      <Text style={[styles.attivitaNome, { color: '#dc2626' }]}>🏥 Intervento Chirurgico</Text>
+      <Text style={styles.attivitaDesc}>Oggi è il giorno del tuo intervento. In bocca al lupo!</Text>
+    </View>
+  </View>
+)}
+{attivitaDelGiorno.length === 0 && !(dataIntervento && giornoSelezionato.toDateString() === new Date(dataIntervento.getFullYear(), dataIntervento.getMonth(), dataIntervento.getDate()).toDateString()) ? (
+  <Text style={styles.nessunaAttivita}>Nessuna attività per questo giorno.</Text>
+) : (
           attivitaDelGiorno.map((a, i) => {
             const bloccata = a.dataAttivita > oggi;
             return (

@@ -53,6 +53,11 @@ export default function ProfiloScreen() {
     }
   };
 
+  const handleEsci = async () => {
+  await AsyncStorage.removeItem('paziente');
+  router.replace('/(tabs)');
+};
+
   if (!paziente) return null;
 
   const nCompletate = attivitaCompletate.length;
@@ -115,10 +120,7 @@ export default function ProfiloScreen() {
         </View>
       )}
 
-      <TouchableOpacity style={styles.exitButton} onPress={async () => {
-        await AsyncStorage.removeItem('paziente');
-        router.replace('/');
-      }}>
+      <TouchableOpacity style={styles.exitButton} onPress={handleEsci}>
         <Text style={styles.exitButtonText}>Esci</Text>
       </TouchableOpacity>
     </ScrollView>
